@@ -149,6 +149,26 @@ lookup and made a working call look like a broken one.
 
 Roughly in priority order.
 
+**Fix flickering when switching Spaces.** The blur flickers as the desktop
+changes.
+
+Two suspects. First, and most likely, this is a regression from the Mission
+Control fix: `collectionBehavior` gained `.transient` and lost `.stationary`, and
+`.stationary` is precisely the flag that says "stay put during Exposé and space
+transitions". Confirm by restoring `.stationary` temporarily — if the flicker
+stops, the two behaviours are in direct conflict and Mission Control needs
+explicit detection instead (watching for the Dock process becoming frontmost)
+rather than a window flag.
+
+Second, independent of that: during a space change the frontmost app may briefly
+be unreadable, so `FocusTracker` reports nil, `shouldBeVisible` goes false, and
+the overlay fades out and back in. That alone would flicker. The fix there is a
+short grace period before hiding on a nil focus, so a momentary gap doesn't start
+a fade cycle.
+
+Check which before changing either: the app logs `focus: none` when it reads nil,
+so a flicker with no such line in the log points at the first cause.
+
 **Widen title-bar detection if an app needs it.** Suspension waits for AX to
 confirm a window moved, with a press on the 28pt title-bar band as a fast path.
 Apps that can be dragged from elsewhere — a hidden title bar, a tall custom

@@ -34,4 +34,4 @@ clean: ## Remove build artifacts and the generated project
 	@rm -rf $(DERIVED) $(APP).xcodeproj
 
 tcc-reset: ## Forget the Accessibility grant (useful for testing onboarding)
-	@tccutil reset Accessibility dev.maxhafs.vignette
+	@tccutil reset Accessibility dev.maxhafs.vignette.debug

@@ -24,6 +24,9 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.maxhafs.vignette
         PRODUCT_NAME: Vignette
+        # Display name only. PRODUCT_NAME stays "Vignette" in both configs so the
+        # bundle path and `pkill -x Vignette` work the same either way.
+        APP_DISPLAY_NAME: Vignette
         INFOPLIST_FILE: Resources/Info.plist
         CODE_SIGN_ENTITLEMENTS: Resources/Vignette.entitlements
         CODE_SIGN_STYLE: Manual
@@ -38,6 +41,12 @@ targets:
         SWIFT_STRICT_CONCURRENCY: complete
         COMBINE_HIDPI_IMAGES: YES
       configs:
+        # Debug gets its own bundle id so a locally-built copy and an installed
+        # release can hold Accessibility permission at the same time. They share a
+        # signature-keyed TCC entry otherwise, and each grant revokes the other.
+        Debug:
+          PRODUCT_BUNDLE_IDENTIFIER: dev.maxhafs.vignette.debug
+          APP_DISPLAY_NAME: Vignette (Debug)
         Release:
           CODE_SIGN_ENTITLEMENTS: Resources/Vignette-Release.entitlements
           # Xcode injects get-task-allow into every signed build unless told not

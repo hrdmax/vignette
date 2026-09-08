@@ -180,7 +180,14 @@ hot-reload). TCC can't resolve the app's identity across that split, so the
 Accessibility grant silently never applies — the app reports "not trusted" no matter how
 many times you tick the box in System Settings. Don't remove that setting.
 
-`make tcc-reset` forgets the grant if you want to re-test onboarding.
+Debug builds use the bundle id `dev.maxhafs.vignette.debug` and show up as
+"Vignette (Debug)", so a locally-built copy and a brew-installed release can hold
+Accessibility permission at the same time. Sharing one bundle id means macOS ties
+both to a single signature-keyed grant, and each build silently revokes the
+other's. `PRODUCT_NAME` stays `Vignette` in both, so paths and `pkill -x Vignette`
+behave the same either way.
+
+`make tcc-reset` forgets the Debug build's grant if you want to re-test onboarding.
 
 ## Distribution constraint
 

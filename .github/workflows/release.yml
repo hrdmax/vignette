@@ -160,5 +160,33 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add Casks/vignette.rb
+
+          if git diff --staged --quiet; then
+            echo "Cask already up to date; nothing to push."
+            exit 0
+          fi
           git commit -m "vignette $VERSION"
-          git push
+
+          # GitHub sometimes rejects a push with "cannot lock ref ... is at <our
+          # own new commit>" — it applied the push, then failed to acknowledge it.
+          # Failing the release there would be a lie, since the cask has shipped.
+          # So: treat "remote already has our commit" as success, and rebase and
+          # retry anything else rather than dying on a transient race.
+          for attempt in 1 2 3; do
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+
+            git fetch origin main
+            if [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ]; then
+              echo "Push landed despite the error; remote is at $(git rev-parse --short HEAD)."
+              exit 0
+            fi
+
+            echo "Push attempt $attempt failed; rebasing and retrying."
+            git rebase origin/main
+            sleep 3
+          done
+
+          echo "::error::Could not push the updated cask after 3 attempts"
+          exit 1

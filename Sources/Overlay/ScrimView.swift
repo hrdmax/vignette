@@ -10,7 +10,11 @@ final class ScrimView: NSView {
         didSet { tintView.layer?.opacity = Float(dimming) }
     }
 
-    var cornerRadius: CGFloat = 10
+    /// Matched by eye against real windows. No single value is exact: macOS rounds
+    /// different window styles differently — Finder is rounder than this, TextEdit
+    /// less — and there is no API exposing another app's corner radius. 16 was the
+    /// best compromise across the windows tried.
+    var cornerRadius: CGFloat = 16
 
     /// The unblurred cut-out, in this view's own bottom-left-origin coordinates.
     /// `nil` blurs the whole screen.

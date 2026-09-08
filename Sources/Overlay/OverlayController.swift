@@ -18,10 +18,21 @@ final class OverlayController {
         }
     }
 
+    /// Switching the feature on or off is a deliberate act, so it gets a fade the
+    /// user can actually see.
+    private let toggleFade: TimeInterval = 0.20
+    /// Leaving on a drag is quick, so the scrim doesn't visibly trail the window.
+    private let dragFadeOut: TimeInterval = 0.08
+    /// Coming back is slower; an abrupt reappearance reads as a flash.
+    private let dragFadeIn: TimeInterval = 0.16
+    /// Focus moving somewhere we can't read.
+    private let focusFade: TimeInterval = 0.12
+
     private var windows: [OverlayWindow] = []
     private var lastFocused: FocusedWindow?
     private var screenObserver: NSObjectProtocol?
     private var isSuspended = false
+    private var teardownTimer: Timer?
 
     init() {
         screenObserver = NotificationCenter.default.addObserver(
@@ -32,7 +43,8 @@ final class OverlayController {
             MainActor.assumeIsolated { [weak self] in
                 guard let self, self.isEnabled else { return }
                 self.rebuildWindows()
-                self.apply(self.lastFocused)
+                self.applyHoles(self.lastFocused)
+                self.updateVisibility(duration: 0)
             }
         }
     }
@@ -45,37 +57,68 @@ final class OverlayController {
         isEnabled = enabled
 
         if enabled {
-            rebuildWindows()
-            apply(lastFocused)
+            teardownTimer?.invalidate()
+            teardownTimer = nil
+            if windows.isEmpty { rebuildWindows() }
+            applyHoles(lastFocused)
+            updateVisibility(duration: toggleFade)
         } else {
-            teardownWindows()
+            updateVisibility(duration: toggleFade)
+            // Let the fade finish before the windows go away, or there is nothing
+            // left on screen to animate.
+            scheduleTeardown(after: toggleFade)
         }
     }
 
     func update(focused: FocusedWindow?) {
+        let hadFocus = lastFocused != nil
         lastFocused = focused
         guard isEnabled else { return }
-        apply(focused)
+
+        applyHoles(focused)
+        if hadFocus != (focused != nil) {
+            updateVisibility(duration: focusFade)
+        }
     }
 
     /// Stands the scrim down while the focused window is being dragged. The AX
     /// position is stale mid-drag, so a visible scrim would simply lag behind.
     func setSuspended(_ suspended: Bool) {
+        guard suspended != isSuspended else { return }
         isSuspended = suspended
-        for window in windows { window.scrim?.isSuspended = suspended }
+        updateVisibility(duration: suspended ? dragFadeOut : dragFadeIn)
     }
 
     // MARK: - Internals
 
-    private func apply(_ focused: FocusedWindow?) {
-        // With no identifiable focused window we hide the scrim entirely rather
-        // than dimming everything. "The screen went dark" is a much worse failure
-        // than "the effect switched off for a moment".
-        guard let focused else {
-            for window in windows { window.orderOut(nil) }
-            return
-        }
+    /// With no identifiable focused window we hide the scrim entirely rather than
+    /// blurring everything. "The screen went dark" is a much worse failure than
+    /// "the effect switched off for a moment".
+    private var shouldBeVisible: Bool {
+        isEnabled && !isSuspended && lastFocused != nil
+    }
 
+    private func updateVisibility(duration: TimeInterval) {
+        let visible = shouldBeVisible
+
+        for window in windows {
+            if visible {
+                window.orderFront(nil)
+                window.fade(to: 1, duration: duration)
+            } else {
+                window.fade(to: 0, duration: duration) {
+                    MainActor.assumeIsolated { [weak self, weak window] in
+                        // Re-check: the state may have flipped back mid-fade.
+                        guard let self, let window, !self.shouldBeVisible else { return }
+                        window.orderOut(nil)
+                    }
+                }
+            }
+        }
+    }
+
+    private func applyHoles(_ focused: FocusedWindow?) {
+        guard let focused else { return }
         let globalHole = FocusedWindow.flipped(focused.frame)
 
         for window in windows {
@@ -86,8 +129,21 @@ final class OverlayController {
                 width: globalHole.width,
                 height: globalHole.height
             )
-            window.orderFront(nil)
         }
+    }
+
+    private func scheduleTeardown(after delay: TimeInterval) {
+        teardownTimer?.invalidate()
+        let timer = Timer(timeInterval: delay + 0.05, repeats: false) { _ in
+            MainActor.assumeIsolated { [weak self] in
+                guard let self else { return }
+                self.teardownTimer = nil
+                guard !self.isEnabled else { return }
+                self.teardownWindows()
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        teardownTimer = timer
     }
 
     private func rebuildWindows() {
@@ -95,7 +151,6 @@ final class OverlayController {
         windows = NSScreen.screens.map { screen in
             let window = OverlayWindow(screen: screen)
             window.scrim?.dimming = dimming
-            window.scrim?.isSuspended = isSuspended
             return window
         }
     }

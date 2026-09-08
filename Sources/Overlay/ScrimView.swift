@@ -7,18 +7,7 @@ import QuartzCore
 final class ScrimView: NSView {
     /// Strength of the black tint layered over the blur. 0 = blur only.
     var dimming: CGFloat = 0.25 {
-        didSet { updateAppearance(animated: false) }
-    }
-
-    /// Temporarily hides the scrim without disturbing `dimming`, used while a
-    /// window is being dragged and its reported position is stale.
-    var isSuspended = false {
-        didSet {
-            guard isSuspended != oldValue else { return }
-            // Hide instantly so the scrim never trails the window; fade back in,
-            // because an abrupt reappearance is jarring.
-            updateAppearance(animated: !isSuspended)
-        }
+        didSet { tintView.layer?.opacity = Float(dimming) }
     }
 
     var cornerRadius: CGFloat = 10
@@ -58,7 +47,7 @@ final class ScrimView: NSView {
         maskLayer.fillRule = .evenOdd
         layer?.mask = maskLayer
 
-        updateAppearance(animated: false)
+        tintView.layer?.opacity = Float(dimming)
         applyMask()
     }
 
@@ -68,17 +57,6 @@ final class ScrimView: NSView {
     override func layout() {
         super.layout()
         applyMask()
-    }
-
-    private func updateAppearance(animated: Bool) {
-        guard let layer else { return }
-
-        CATransaction.begin()
-        CATransaction.setDisableActions(!animated)
-        if animated { CATransaction.setAnimationDuration(0.12) }
-        layer.opacity = isSuspended ? 0 : 1
-        tintView.layer?.opacity = Float(dimming)
-        CATransaction.commit()
     }
 
     private func applyMask() {

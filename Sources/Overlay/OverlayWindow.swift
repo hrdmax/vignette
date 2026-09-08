@@ -20,6 +20,9 @@ final class OverlayWindow: NSWindow {
         ignoresMouseEvents = true
         isReleasedWhenClosed = false
 
+        // Starts invisible: every appearance is a fade in, never a hard cut.
+        alphaValue = 0
+
         level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.mainMenuWindow)) - 1)
 
         collectionBehavior = [
@@ -40,6 +43,26 @@ final class OverlayWindow: NSWindow {
     }
 
     var scrim: ScrimView? { contentView as? ScrimView }
+
+    /// Fades the whole window, blur included.
+    ///
+    /// Animating the window's alpha rather than a layer's opacity is deliberate:
+    /// AppKit disables implicit layer animations on layer-backed views, and a
+    /// behind-window blur is composited by the WindowServer, which honours window
+    /// alpha but not necessarily a layer mask's opacity.
+    func fade(to alpha: CGFloat, duration: TimeInterval, completion: (() -> Void)? = nil) {
+        guard duration > 0 else {
+            alphaValue = alpha
+            completion?()
+            return
+        }
+
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = duration
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            animator().alphaValue = alpha
+        }, completionHandler: completion)
+    }
 
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }

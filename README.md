@@ -100,6 +100,29 @@ stands down for moves and tracks live for resizes.
 
 Roughly in priority order.
 
+**Never dim the Dock.** With the Dock hidden and set to auto-show, revealing it
+over the blur leaves it dimmed — it is only visible when the focused window
+happens to cover that part of the screen, so the cut-out already exposes it.
+
+The cheap lead is the overlay's window level. It currently sits at
+`CGWindowLevelForKey(.mainMenuWindow) - 1`, which is *above* the Dock's level, so
+the scrim covers it. Dropping to just below `.dockWindow` would let the Dock draw
+over the scrim and never be dimmed, without any Dock-tracking code. Check what
+else that lets through — other apps' floating panels live in that band and would
+stop being dimmed too. Failing that, punch a second hole for the Dock's frame,
+which `CGWindowListCopyWindowInfo` reports for the Dock process while it is shown.
+
+**Disable the blur while Mission Control is open.** The scrim currently stays up
+over Mission Control, which is wrong — there is no focused window to emphasise
+there.
+
+First thing to try is `NSWindow.CollectionBehavior.transient`, which is documented
+to pull a window off screen when Exposé or Mission Control is invoked; if that
+works it needs no detection code at all. If it doesn't, Mission Control runs
+inside the Dock process, so watching for that becoming frontmost is the fallback.
+Note the blur does *not* switch off by itself today: the focused window is still
+readable via AX while Mission Control is up, so `shouldBeVisible` stays true.
+
 **Widen title-bar detection if an app needs it.** Suspension waits for AX to
 confirm a window moved, with a press on the 28pt title-bar band as a fast path.
 Apps that can be dragged from elsewhere — a hidden title bar, a tall custom

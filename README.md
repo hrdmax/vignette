@@ -80,6 +80,11 @@ Two constraints that are load-bearing rather than stylistic:
 - **`blurView.state = .active`.** The overlay window is never key, and the default
   state switches the blur off whenever that's true — i.e. always.
 
+Settings — blur on/off, darken level, shortcut — persist in `UserDefaults` via
+`Preferences`, so the blur comes back on at launch if it was on when you quit.
+Worth revisiting if a login item is ever added, since starting the app
+deliberately and having it start itself are rather different situations.
+
 The global shortcut uses Carbon's `RegisterEventHotKey`. Both that and the drag
 detection below avoid `NSEvent` global monitors for the same reason: installing one
 stops `MenuBarExtra`'s status item from opening its menu at all.
@@ -94,11 +99,6 @@ stands down for moves and tracks live for resizes.
 ## To do
 
 Roughly in priority order.
-
-**Persist the toggle and darken level.** Both still reset on every launch. The
-shortcut already persists, so `Preferences` exists and this is a couple of lines —
-the only real question is whether the blur switching itself on at login is
-wanted or startling.
 
 **Widen title-bar detection if an app needs it.** Suspension waits for AX to
 confirm a window moved, with a press on the 28pt title-bar band as a fast path.

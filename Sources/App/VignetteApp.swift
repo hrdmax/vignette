@@ -25,15 +25,17 @@ final class AppModel {
     /// the user asks for it.
     var isDimmingEnabled = false {
         didSet {
-            overlay.setEnabled(isDimmingEnabled)
-            // Only pay for mouse polling while the overlay is actually up.
-            tracker.setDragWatchingEnabled(isDimmingEnabled)
+            applyEnabled()
+            Preferences.isDimmingEnabled = isDimmingEnabled
         }
     }
 
     var dimming: CGFloat {
         get { overlay.dimming }
-        set { overlay.dimming = newValue }
+        set {
+            overlay.dimming = newValue
+            Preferences.dimming = newValue
+        }
     }
 
     private(set) var hotkey: Hotkey?
@@ -64,6 +66,14 @@ final class AppModel {
         }
         tracker.start()
 
+        // Property observers don't fire for assignments inside init, so the
+        // restored state has to be applied by hand.
+        overlay.dimming = Preferences.dimming
+        isDimmingEnabled = Preferences.isDimmingEnabled
+        applyEnabled()
+
+        print("[vignette] restored — blur: \(isDimmingEnabled), darken: \(overlay.dimming)")
+
         hotkey = Preferences.hotkey
         HotkeyManager.shared.onTrigger = { [weak self] in
             guard let self else { return }
@@ -82,6 +92,12 @@ final class AppModel {
                 self.isTrusted = trusted
             }
         }
+    }
+
+    private func applyEnabled() {
+        overlay.setEnabled(isDimmingEnabled)
+        // Only pay for mouse polling while the overlay is actually up.
+        tracker.setDragWatchingEnabled(isDimmingEnabled)
     }
 
     func recordShortcut() {

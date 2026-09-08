@@ -47,7 +47,8 @@ private func focusObserverCallback(
 ) {
     guard let refcon else { return }
     let tracker = Unmanaged<FocusTracker>.fromOpaque(refcon).takeUnretainedValue()
-    MainActor.assumeIsolated { tracker.refresh() }
+    let name = notification as String
+    MainActor.assumeIsolated { tracker.handle(notification: name) }
 }
 
 @MainActor
@@ -72,11 +73,17 @@ final class FocusTracker {
     /// window's final position rather than its second-to-last one.
     var dragReleaseSettleDelay: TimeInterval = 0.05
 
+    /// How close to a window edge a press has to be to read as a resize grab.
+    /// macOS itself uses a band of roughly this width.
+    private let resizeEdgeSlop: CGFloat = 8
+
     private var mouseTimer: Timer?
     private var releaseTimer: Timer?
     private var isMoving = false
     private var wasButtonDown = false
     private var pressOrigin: NSPoint?
+    private var isDragging = false
+    private var sawResizeThisDrag = false
 
     private struct Snapshot {
         let window: FocusedWindow
@@ -116,6 +123,24 @@ final class FocusTracker {
         detachObserver()
     }
 
+    func handle(notification: String) {
+        if isDragging {
+            switch notification {
+            case kAXWindowResizedNotification:
+                // Live geometry — so this was a resize, not a move. Latch it: a
+                // corner resize also emits move notifications, and those must not
+                // flip us back into suspending.
+                sawResizeThisDrag = true
+                resume()
+            case kAXWindowMovedNotification:
+                if !sawResizeThisDrag { suspend() }
+            default:
+                break
+            }
+        }
+        refresh()
+    }
+
     func refresh() {
         let snapshot = Self.readFocused()
         current = snapshot?.window
@@ -141,10 +166,9 @@ final class FocusTracker {
             startWatchingMouse()
         } else {
             stopWatchingMouse()
-            if isMoving {
-                isMoving = false
-                onMotionChange?(false)
-            }
+            isDragging = false
+            sawResizeThisDrag = false
+            resume()
         }
     }
 
@@ -180,7 +204,7 @@ final class FocusTracker {
             return
         }
 
-        if isDown, !isMoving, let origin = pressOrigin {
+        if isDown, !isDragging, let origin = pressOrigin {
             // A few points of slop, so a plain click never counts as a drag.
             if hypot(location.x - origin.x, location.y - origin.y) > 2 {
                 beginDrag()
@@ -195,13 +219,53 @@ final class FocusTracker {
     }
 
     private func beginDrag() {
+        guard !isDragging else { return }
+        isDragging = true
+        sawResizeThisDrag = false
+
+        // A press on the window's edge is a resize grab. AX streams live geometry
+        // for resizes, so the dim can stay up and track it. Anything else is a
+        // move, where the reported position goes stale and the scrim must stand
+        // down. This is only the opening guess — `handle(notification:)` corrects
+        // it as soon as AX says which it really was.
+        if pressIsOnWindowEdge() {
+            sawResizeThisDrag = true
+            return
+        }
+
+        suspend()
+    }
+
+    private func suspend() {
         guard !isMoving else { return }
         isMoving = true
         onMotionChange?(true)
     }
 
-    private func endDrag() {
+    /// Bring the dim back mid-drag, once we know this is a resize after all.
+    private func resume() {
         guard isMoving else { return }
+        isMoving = false
+        onMotionChange?(false)
+    }
+
+    private func pressIsOnWindowEdge() -> Bool {
+        guard let pressOrigin, let current else { return false }
+        let frame = FocusedWindow.flipped(current.frame)
+        let outer = frame.insetBy(dx: -resizeEdgeSlop, dy: -resizeEdgeSlop)
+        let inner = frame.insetBy(dx: resizeEdgeSlop, dy: resizeEdgeSlop)
+        return outer.contains(pressOrigin) && !inner.contains(pressOrigin)
+    }
+
+    private func endDrag() {
+        guard isDragging else { return }
+        isDragging = false
+        sawResizeThisDrag = false
+
+        guard isMoving else {
+            refresh()
+            return
+        }
         releaseTimer?.invalidate()
 
         // Give the app one beat to publish its final position, so the scrim never

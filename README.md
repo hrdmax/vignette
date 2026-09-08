@@ -7,7 +7,7 @@ Working name — rename freely (it appears in `project.yml`, `Resources/`, and `
 ## Install
 
 ```sh
-brew install --cask maxhafs/tap/vignette
+brew install --cask hrdmax/tap/vignette
 ```
 
 Vignette is signed but **not notarized** — notarization requires a paid Apple
@@ -22,7 +22,7 @@ Gatekeeper has never seen. To skip it for good, install without the quarantine
 flag instead:
 
 ```sh
-brew install --cask --no-quarantine maxhafs/tap/vignette
+brew install --cask --no-quarantine hrdmax/tap/vignette
 ```
 
 and put `export HOMEBREW_CASK_OPTS="--no-quarantine"` in your shell profile so

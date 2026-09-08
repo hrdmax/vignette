@@ -23,7 +23,14 @@ final class OverlayWindow: NSWindow {
         // Starts invisible: every appearance is a fade in, never a hard cut.
         alphaValue = 0
 
-        level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.mainMenuWindow)) - 1)
+        // Just under the Dock, which also puts us under the menu bar.
+        //
+        // Both then draw over the blur and are never dimmed — the Dock matters
+        // because it is revealed on hover over whatever is on screen, and dimming
+        // it made it invisible unless the focused window happened to cover that
+        // part of the screen. The menu bar matters because it holds this app's
+        // only UI, so it has to stay reachable even if the hole is wrong.
+        level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.dockWindow)) - 1)
 
         collectionBehavior = [
             .canJoinAllSpaces,

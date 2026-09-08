@@ -75,8 +75,12 @@ whatever is rendered beneath it) plus a black tint, masked by an even-odd
 
 Two constraints that are load-bearing rather than stylistic:
 
-- **The overlay sits below the menu bar level.** The menu bar is the app's only UI,
-  so it has to stay reachable even when the geometry is wrong.
+- **The overlay sits just below the Dock's window level** (`dockWindow - 1`, i.e.
+  19; the Dock is 20 and the menu bar 24). Both then draw over the blur and are
+  never dimmed. That matters for the Dock because it is revealed on hover and was
+  otherwise invisible unless the focused window covered that part of the screen,
+  and for the menu bar because it holds the app's only UI, so it must stay
+  reachable even if the cut-out is wrong.
 - **`blurView.state = .active`.** The overlay window is never key, and the default
   state switches the blur off whenever that's true — i.e. always.
 
@@ -99,18 +103,6 @@ stands down for moves and tracks live for resizes.
 ## To do
 
 Roughly in priority order.
-
-**Never dim the Dock.** With the Dock hidden and set to auto-show, revealing it
-over the blur leaves it dimmed — it is only visible when the focused window
-happens to cover that part of the screen, so the cut-out already exposes it.
-
-The cheap lead is the overlay's window level. It currently sits at
-`CGWindowLevelForKey(.mainMenuWindow) - 1`, which is *above* the Dock's level, so
-the scrim covers it. Dropping to just below `.dockWindow` would let the Dock draw
-over the scrim and never be dimmed, without any Dock-tracking code. Check what
-else that lets through — other apps' floating panels live in that band and would
-stop being dimmed too. Failing that, punch a second hole for the Dock's frame,
-which `CGWindowListCopyWindowInfo` reports for the Dock process while it is shown.
 
 **Disable the blur while Mission Control is open.** The scrim currently stays up
 over Mission Control, which is wrong — there is no focused window to emphasise

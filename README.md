@@ -2,6 +2,11 @@
 
 macOS focus aid: blurs everything except the focused window.
 
+> **Built with [Claude Code](https://claude.com/claude-code).** The whole project —
+> the app, the build setup, the release pipeline, and this README — was written by
+> Claude Code, with the direction, design decisions and testing coming from
+> [@hrdmax](https://github.com/hrdmax).
+
 Working name — rename freely (it appears in `project.yml`, `Resources/`, and `Makefile`).
 
 ## Install

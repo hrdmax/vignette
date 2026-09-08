@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- NOT sandboxed on purpose: the Accessibility API (AXUIElement against
+	     other processes) is unavailable to sandboxed apps, which also rules
+	     out Mac App Store distribution. Ship via Developer ID + notarization. -->
+	<key>com.apple.security.app-sandbox</key>
+	<false/>
+	<key>com.apple.security.get-task-allow</key>
+	<true/>
+</dict>
+</plist>

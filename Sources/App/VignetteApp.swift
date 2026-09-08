@@ -21,7 +21,20 @@ final class AppModel {
     private(set) var isTrusted = false
     private(set) var focused: FocusedWindow?
 
+    /// Off at launch on purpose: a full-screen scrim should never appear until
+    /// the user asks for it.
+    var isDimmingEnabled = false {
+        didSet { overlay.setEnabled(isDimmingEnabled) }
+    }
+
+    var dimming: CGFloat {
+        get { overlay.dimming }
+        set { overlay.dimming = newValue }
+    }
+
     private let tracker = FocusTracker()
+    private let overlay = OverlayController()
+    private var lastLoggedPID: pid_t?
 
     init() {
         setvbuf(stdout, nil, _IONBF, 0)  // unbuffered, so logs show when piped
@@ -29,8 +42,15 @@ final class AppModel {
         print("[vignette] launched — accessibility trusted: \(isTrusted)")
 
         tracker.onChange = { [weak self] window in
-            self?.focused = window
-            if let window { print("[vignette] focus: \(window.appName) \(window.frame)") }
+            guard let self else { return }
+            self.focused = window
+            self.overlay.update(focused: window)
+
+            // Only on app switches: move/resize now fires per frame during a drag.
+            if window?.pid != self.lastLoggedPID {
+                self.lastLoggedPID = window?.pid
+                print("[vignette] focus: \(window?.appName ?? "none")")
+            }
         }
         tracker.start()
 
@@ -66,6 +86,16 @@ struct MenuContent: View {
             Button("Grant Accessibility Access…") {
                 Permissions.requestAccessibility()
                 Permissions.openAccessibilitySettings()
+            }
+        }
+
+        Divider()
+        Toggle("Dim Unfocused Windows", isOn: Bindable(model).isDimmingEnabled)
+            .disabled(!model.isTrusted)
+
+        Menu("Dim Amount") {
+            ForEach([0.25, 0.4, 0.55, 0.7, 0.85], id: \.self) { level in
+                Button("\(Int(level * 100))%") { model.dimming = level }
             }
         }
 

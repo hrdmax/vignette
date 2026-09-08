@@ -56,7 +56,16 @@ jobs:
           security list-keychain -d user -s "$KEYCHAIN" login.keychain
 
           rm "$RUNNER_TEMP/cert.p12"
-          security find-identity -p codesigning "$KEYCHAIN"
+
+          # A self-signed certificate must be explicitly trusted for code signing
+          # or codesign refuses to use it. Pulled back out of the keychain rather
+          # than the .p12, so this doesn't depend on the runner's openssl flavour.
+          security find-certificate -c "Vignette Self-Signed" -p "$KEYCHAIN" \
+            > "$RUNNER_TEMP/cert.pem"
+          sudo security add-trusted-cert -d -r trustRoot -p codeSign \
+            -k /Library/Keychains/System.keychain "$RUNNER_TEMP/cert.pem"
+
+          security find-identity -v -p codesigning "$KEYCHAIN"
 
       - name: Build
         run: |
@@ -112,11 +121,18 @@ jobs:
 
       - name: Update the Homebrew tap
         env:
-          GH_TOKEN: ${{ secrets.TAP_PUSH_TOKEN }}
+          DEPLOY_KEY: ${{ secrets.TAP_DEPLOY_KEY }}
           OWNER: ${{ github.repository_owner }}
           REPO: ${{ github.repository }}
         run: |
-          git clone "https://x-access-token:$GH_TOKEN@github.com/$OWNER/homebrew-tap.git" tap
+          # Deploy key rather than a PAT: write access to this one repo, nothing else.
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/tap_deploy
+          chmod 600 ~/.ssh/tap_deploy
+          ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
+          export GIT_SSH_COMMAND="ssh -i ~/.ssh/tap_deploy -o IdentitiesOnly=yes"
+
+          git clone "git@github.com:$OWNER/homebrew-tap.git" tap
           mkdir -p tap/Casks
 
           cat > tap/Casks/vignette.rb <<CASK

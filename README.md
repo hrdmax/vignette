@@ -128,8 +128,9 @@ One-time setup:
 1. Create a **public** `homebrew-tap` repo under the same account.
 2. Run `scripts/make-signing-cert.sh`, then add the secrets it prints:
    `SIGNING_CERT_P12`, `SIGNING_CERT_PASSWORD`, `KEYCHAIN_PASSWORD`.
-3. Create a fine-grained PAT with **contents: write** on the tap repo and add it
-   as `TAP_PUSH_TOKEN`.
+3. Add a deploy key with write access to the tap repo, and store its private
+   half as the `TAP_DEPLOY_KEY` secret. A deploy key is scoped to that single
+   repo, unlike a personal access token.
 
 **Why self-signed rather than ad-hoc.** It does nothing for Gatekeeper — only
 notarization does. What it buys is a *stable* signature. Ad-hoc signing produces a

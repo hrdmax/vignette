@@ -5,3 +5,13 @@ DerivedData/
 .DS_Store
 *.xcuserstate
 xcuserdata/
+
+# Defensive: this repo has scripts that generate signing material. It should
+# never land here (they write to TMPDIR), but a stray file must not be committable.
+*.p12
+*.pem
+*.cer
+*.key
+*.keychain
+*.mobileprovision
+.env

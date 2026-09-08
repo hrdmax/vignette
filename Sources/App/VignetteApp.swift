@@ -97,11 +97,12 @@ struct MenuContent: View {
         }
 
         Divider()
-        Toggle("Dim Unfocused Windows", isOn: Bindable(model).isDimmingEnabled)
+        Toggle("Blur Unfocused Windows", isOn: Bindable(model).isDimmingEnabled)
             .disabled(!model.isTrusted)
 
-        Menu("Dim Amount") {
-            ForEach([0.25, 0.4, 0.55, 0.7, 0.85], id: \.self) { level in
+        Menu("Darken") {
+            Button("Blur only") { model.dimming = 0 }
+            ForEach([0.15, 0.25, 0.4, 0.6], id: \.self) { level in
                 Button("\(Int(level * 100))%") { model.dimming = level }
             }
         }

@@ -11,8 +11,8 @@ import AppKit
 final class OverlayController {
     private(set) var isEnabled = false
 
-    /// 0 = invisible, 1 = fully black.
-    var dimming: CGFloat = 0.55 {
+    /// Strength of the black tint over the blur. 0 = blur only.
+    var dimming: CGFloat = 0.25 {
         didSet {
             for window in windows { window.scrim?.dimming = dimming }
         }

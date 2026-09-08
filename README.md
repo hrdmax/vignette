@@ -58,6 +58,35 @@ resizes are handled differently on purpose — AX reports live geometry througho
 resize, but its position attribute is stale for the whole of a drag, so the scrim
 stands down for moves and tracks live for resizes.
 
+## To do
+
+Roughly in priority order.
+
+**Punch holes for the focused app's other windows.** Dropdowns, sheets, popovers
+and autocomplete panels are separate windows outside the main window's frame, so
+they currently get blurred while you're using them. This is the one remaining
+issue that reads as a bug rather than a missing feature. Fix: instead of one hole
+from `kAXFocusedWindowAttribute`, punch one per window belonging to the focused
+app — and include windows with a layer above 0, since menus live there.
+
+**Persist preferences.** The toggle and darken level reset on every launch.
+`UserDefaults`, read in `AppModel.init`.
+
+**Narrow drag detection.** Any left-drag suspends the blur, text selection and
+file drags included, because `pollMouse` can't tell them apart at the instant
+movement starts. Deliberately over-triggers: failing to undim during a real window
+drag is a worse outcome than undimming when you didn't need it. If it does become
+annoying, the lead is checking at mouse-down whether the press landed on the title
+bar — but that risks the worse failure for apps with unusual drag regions.
+
+**Test multi-display.** `FocusedWindow.flipped` anchors to the primary screen's
+height, which is exactly where this kind of coordinate maths breaks. One overlay
+window per `NSScreen` already exists and screen changes are observed, but none of
+it has run against a second monitor. Check that the hole lands on the right
+screen, and that hot-plugging a display doesn't leave a stale overlay behind.
+
+**Consider a hotkey.** The menu bar is currently the only way to toggle the blur.
+
 ## Code signing
 
 Signed with a free **Apple Development** certificate (team `AH9NNPN928`), configured in

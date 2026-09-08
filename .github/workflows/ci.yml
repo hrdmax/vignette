@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate project
+        run: xcodegen generate
+
+      # Ad-hoc signing: CI only needs to know it compiles and the tests pass.
+      # Real signing happens in release.yml.
+      - name: Build and test
+        run: |
+          set -o pipefail
+          xcodebuild -project Vignette.xcodeproj -scheme Vignette \
+            -configuration Debug -derivedDataPath build \
+            CODE_SIGN_IDENTITY="-" CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM="" \
+            test

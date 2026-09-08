@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Not sandboxed: the Accessibility API against other processes is
+	     unavailable to sandboxed apps. See README. -->
+	<key>com.apple.security.app-sandbox</key>
+	<false/>
+	<!-- Deliberately no com.apple.security.get-task-allow. It lets a debugger
+	     attach to the app, which has no place in a build handed to other people. -->
+</dict>
+</plist>

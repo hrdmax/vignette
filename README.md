@@ -4,6 +4,30 @@ macOS focus aid: blurs everything except the focused window.
 
 Working name — rename freely (it appears in `project.yml`, `Resources/`, and `Makefile`).
 
+## Install
+
+```sh
+brew install --cask maxhafs/tap/vignette
+```
+
+Vignette is signed but **not notarized** — notarization requires a paid Apple
+Developer membership. macOS therefore blocks the first launch with "Apple could
+not verify this app is free of malware". Approve it once:
+
+**System Settings → Privacy & Security →** scroll to Security **→ Open Anyway**,
+authenticate, then confirm.
+
+This repeats after every update, because each new build is an unnotarized binary
+Gatekeeper has never seen. To skip it for good, install without the quarantine
+flag instead:
+
+```sh
+brew install --cask --no-quarantine maxhafs/tap/vignette
+```
+
+and put `export HOMEBREW_CASK_OPTS="--no-quarantine"` in your shell profile so
+`brew upgrade` keeps behaving the same way.
+
 ## Requirements
 
 - macOS 14+ (built and tested on 26.x, Xcode 26.2, Swift 6.2)
@@ -86,6 +110,36 @@ it has run against a second monitor. Check that the hole lands on the right
 screen, and that hot-plugging a display doesn't leave a stale overlay behind.
 
 **Consider a hotkey.** The menu bar is currently the only way to toggle the blur.
+
+## Releasing
+
+`ci.yml` builds and tests every push and pull request. Releases are cut by tag:
+
+```sh
+git tag v0.2.0 && git push origin v0.2.0
+```
+
+`release.yml` then builds Release, signs, zips with `ditto`, publishes a GitHub
+Release, and commits an updated cask to the `homebrew-tap` repo. It fails the
+build if a release binary ever carries `get-task-allow`.
+
+One-time setup:
+
+1. Create a **public** `homebrew-tap` repo under the same account.
+2. Run `scripts/make-signing-cert.sh`, then add the secrets it prints:
+   `SIGNING_CERT_P12`, `SIGNING_CERT_PASSWORD`, `KEYCHAIN_PASSWORD`.
+3. Create a fine-grained PAT with **contents: write** on the tap repo and add it
+   as `TAP_PUSH_TOKEN`.
+
+**Why self-signed rather than ad-hoc.** It does nothing for Gatekeeper — only
+notarization does. What it buys is a *stable* signature. Ad-hoc signing produces a
+different hash every build, and macOS ties the Accessibility grant to the
+signature, so every update would silently kill the app until the user
+re-approved it. One persistent certificate keeps the grant across updates.
+
+Release builds use `Resources/Vignette-Release.entitlements`, which omits
+`get-task-allow`, and set `CODE_SIGN_INJECT_BASE_ENTITLEMENTS: NO` — without that
+Xcode injects the entitlement back in regardless of the file.
 
 ## Code signing
 

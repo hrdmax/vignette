@@ -1,0 +1,148 @@
+name: Release
+
+# Tag-triggered rather than merge-triggered: a release is a deliberate act, and
+# every merge cutting one would spam the tap with versions nobody installs.
+#
+#   git tag v0.2.0 && git push origin v0.2.0
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release, without the leading v (e.g. 0.2.0)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Work out the version
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "TAG=v$VERSION" >> "$GITHUB_ENV"
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Import signing certificate
+        env:
+          CERT_P12: ${{ secrets.SIGNING_CERT_P12 }}
+          CERT_PASSWORD: ${{ secrets.SIGNING_CERT_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/build.keychain"
+          echo "$CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" \
+            -P "$CERT_PASSWORD" -T /usr/bin/codesign
+          # Without this, codesign blocks on a GUI password prompt that can never
+          # be answered on a runner.
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
+          security list-keychain -d user -s "$KEYCHAIN" login.keychain
+
+          rm "$RUNNER_TEMP/cert.p12"
+          security find-identity -p codesigning "$KEYCHAIN"
+
+      - name: Build
+        run: |
+          set -o pipefail
+          xcodegen generate
+          xcodebuild -project Vignette.xcodeproj -scheme Vignette \
+            -configuration Release -derivedDataPath build \
+            MARKETING_VERSION="$VERSION" \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="Vignette Self-Signed" \
+            DEVELOPMENT_TEAM="" \
+            OTHER_CODE_SIGN_FLAGS="--timestamp=none" \
+            build
+
+      - name: Verify the signature
+        run: |
+          APP="build/Build/Products/Release/Vignette.app"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          codesign -dvvv "$APP" 2>&1 | grep -E "Identifier|Authority|CDHash"
+          # get-task-allow in a shipped build would be a hole; fail loudly if the
+          # Release entitlements ever regress.
+          if codesign -d --entitlements - "$APP" 2>/dev/null | grep -q "get-task-allow"; then
+            echo "::error::Release build carries get-task-allow"
+            exit 1
+          fi
+
+      - name: Package
+        run: |
+          APP="build/Build/Products/Release/Vignette.app"
+          ZIP="Vignette-$VERSION.zip"
+          # ditto, not zip: preserves the bundle's symlinks and resource forks.
+          ditto -c -k --keepParent "$APP" "$ZIP"
+          echo "ZIP=$ZIP" >> "$GITHUB_ENV"
+          echo "SHA256=$(shasum -a 256 "$ZIP" | cut -d' ' -f1)" >> "$GITHUB_ENV"
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$TAG" "$ZIP" \
+            --title "Vignette $VERSION" \
+            --generate-notes \
+            --notes-file - <<NOTES
+          Install:
+
+              brew install --cask ${{ github.repository_owner }}/tap/vignette
+
+          Vignette is signed but not notarized (that needs a paid Apple
+          membership), so the first launch is blocked. Approve it once under
+          System Settings > Privacy & Security > Open Anyway.
+          NOTES
+
+      - name: Update the Homebrew tap
+        env:
+          GH_TOKEN: ${{ secrets.TAP_PUSH_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.repository }}
+        run: |
+          git clone "https://x-access-token:$GH_TOKEN@github.com/$OWNER/homebrew-tap.git" tap
+          mkdir -p tap/Casks
+
+          cat > tap/Casks/vignette.rb <<CASK
+          cask "vignette" do
+            version "$VERSION"
+            sha256 "$SHA256"
+
+            url "https://github.com/$REPO/releases/download/v#{version}/Vignette-#{version}.zip"
+            name "Vignette"
+            desc "Blurs every window except the focused one"
+            homepage "https://github.com/$REPO"
+
+            depends_on macos: ">= :sonoma"
+
+            app "Vignette.app"
+
+            zap trash: [
+              "~/Library/Preferences/dev.maxhafs.vignette.plist",
+              "~/Library/Saved Application State/dev.maxhafs.vignette.savedState",
+            ]
+          end
+          CASK
+
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Casks/vignette.rb
+          git commit -m "vignette $VERSION"
+          git push

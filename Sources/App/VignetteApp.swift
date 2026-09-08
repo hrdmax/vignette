@@ -43,6 +43,7 @@ final class AppModel {
     private let tracker = FocusTracker()
     private let overlay = OverlayController()
     private var lastLoggedPID: pid_t?
+    private var lastRaisedPID: pid_t?
     private var recorderPanel: ShortcutRecorderPanel?
 
     init() {
@@ -54,6 +55,7 @@ final class AppModel {
             guard let self else { return }
             self.focused = window
             self.overlay.update(focused: window)
+            self.restack(for: window)
 
             // Only on app switches: move/resize now fires per frame during a drag.
             if window?.pid != self.lastLoggedPID {
@@ -96,8 +98,24 @@ final class AppModel {
 
     private func applyEnabled() {
         overlay.setEnabled(isDimmingEnabled)
-        // Only pay for mouse polling while the overlay is actually up.
-        tracker.setDragWatchingEnabled(isDimmingEnabled)
+        // EXPERIMENT: drag watching is off. Suspending during a drag existed only
+        // because the cut-out lagged behind a moving window; with the window above
+        // the blur there is no geometry to lag.
+        tracker.setDragWatchingEnabled(false)
+        if isDimmingEnabled { restack(for: focused) }
+    }
+
+    /// Raises the blur above other apps, then lifts the focused window back over
+    /// it. Keyed on the owning process: activating an app raises all its windows
+    /// above ours, so that is exactly when the order needs re-establishing. Also
+    /// stops the AX raise from re-triggering itself into a loop.
+    private func restack(for window: FocusedWindow?) {
+        guard isDimmingEnabled, let window else { return }
+        guard window.pid != lastRaisedPID else { return }
+        lastRaisedPID = window.pid
+
+        overlay.bringToFront()
+        tracker.raiseFocusedWindow()
     }
 
     func recordShortcut() {

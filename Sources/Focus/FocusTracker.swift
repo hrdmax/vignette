@@ -144,6 +144,17 @@ final class FocusTracker {
         refresh()
     }
 
+    /// Raises the focused window above everything else, including our overlay.
+    ///
+    /// This is the whole z-order experiment: rather than cutting the focused
+    /// window's shape out of the blur, we put the blur above every other window
+    /// and then lift the focused window back over it. The window then masks
+    /// itself, exactly, for free.
+    func raiseFocusedWindow() {
+        guard let observedWindow else { return }
+        AXUIElementPerformAction(observedWindow, kAXRaiseAction as CFString)
+    }
+
     func refresh() {
         let snapshot = Self.readFocused()
         current = snapshot?.window

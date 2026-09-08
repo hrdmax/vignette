@@ -23,7 +23,14 @@ final class OverlayWindow: NSWindow {
         // Starts invisible: every appearance is a fade in, never a hard cut.
         alphaValue = 0
 
-        level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.mainMenuWindow)) - 1)
+        // EXPERIMENT: normal level, not above the menu bar.
+        //
+        // The overlay is raised above other apps' windows with
+        // orderFrontRegardless(), and the focused window is then lifted back over
+        // it via AX. Sitting at the normal level means the Dock (level 20) and the
+        // menu bar (24) are naturally above the blur and never dimmed — two to-do
+        // items that the hole-punching approach had to solve separately.
+        level = .normal
 
         collectionBehavior = [
             .canJoinAllSpaces,

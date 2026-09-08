@@ -117,18 +117,17 @@ final class OverlayController {
         }
     }
 
+    /// EXPERIMENT: no hole at all. The focused window is lifted above the blur
+    /// instead of being cut out of it, so there is no geometry to track — no
+    /// coordinate flipping, no corner radius, no drag lag, no multi-display maths.
     private func applyHoles(_ focused: FocusedWindow?) {
-        guard let focused else { return }
-        let globalHole = FocusedWindow.flipped(focused.frame)
+        for window in windows { window.scrim?.hole = nil }
+    }
 
-        for window in windows {
-            let origin = window.frame.origin
-            window.scrim?.hole = CGRect(
-                x: globalHole.minX - origin.x,
-                y: globalHole.minY - origin.y,
-                width: globalHole.width,
-                height: globalHole.height
-            )
+    /// Puts the blur above other applications' windows without activating us.
+    func bringToFront() {
+        for window in windows where window.isVisible {
+            window.orderFrontRegardless()
         }
     }
 

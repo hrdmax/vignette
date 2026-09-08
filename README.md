@@ -80,6 +80,10 @@ Two constraints that are load-bearing rather than stylistic:
 - **`blurView.state = .active`.** The overlay window is never key, and the default
   state switches the blur off whenever that's true — i.e. always.
 
+The global shortcut uses Carbon's `RegisterEventHotKey`. Both that and the drag
+detection below avoid `NSEvent` global monitors for the same reason: installing one
+stops `MenuBarExtra`'s status item from opening its menu at all.
+
 Focus tracking is `AXObserver`-driven. Drag state is *not*: it comes from polling
 `NSEvent.pressedMouseButtons` at 60Hz, because installing an `NSEvent` global
 monitor stops `MenuBarExtra`'s status item from opening its menu at all. Moves and
@@ -91,8 +95,10 @@ stands down for moves and tracks live for resizes.
 
 Roughly in priority order.
 
-**Persist preferences.** The toggle and darken level reset on every launch.
-`UserDefaults`, read in `AppModel.init`.
+**Persist the toggle and darken level.** Both still reset on every launch. The
+shortcut already persists, so `Preferences` exists and this is a couple of lines —
+the only real question is whether the blur switching itself on at login is
+wanted or startling.
 
 **Widen title-bar detection if an app needs it.** Suspension waits for AX to
 confirm a window moved, with a press on the 28pt title-bar band as a fast path.
@@ -106,8 +112,6 @@ height, which is exactly where this kind of coordinate maths breaks. One overlay
 window per `NSScreen` already exists and screen changes are observed, but none of
 it has run against a second monitor. Check that the hole lands on the right
 screen, and that hot-plugging a display doesn't leave a stale overlay behind.
-
-**Consider a hotkey.** The menu bar is currently the only way to toggle the blur.
 
 ## Releasing
 

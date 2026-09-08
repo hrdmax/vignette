@@ -117,19 +117,27 @@ final class OverlayController {
         }
     }
 
+    /// EXPERIMENT: no cut-out. The focused window is ordered above the blur, so
+    /// it masks itself — no coordinate flipping, no corner radius, no drag lag.
     private func applyHoles(_ focused: FocusedWindow?) {
-        guard let focused else { return }
-        let globalHole = FocusedWindow.flipped(focused.frame)
+        for window in windows { window.scrim?.hole = nil }
+    }
 
-        for window in windows {
-            let origin = window.frame.origin
-            window.scrim?.hole = CGRect(
-                x: globalHole.minX - origin.x,
-                y: globalHole.minY - origin.y,
-                width: globalHole.width,
-                height: globalHole.height
-            )
+    /// Slides every overlay directly beneath the focused window.
+    func place(below focused: FocusedWindow) {
+        guard let target = WindowOrdering.windowID(pid: focused.pid, frame: focused.frame)
+        else {
+            print("[vignette] order: no CGWindowID for \(focused.appName)")
+            return
         }
+
+        // No isVisible guard: at enable time the overlay is still fading in and
+        // reports invisible, which silently skipped the initial ordering.
+        for window in windows {
+            let ok = WindowOrdering.place(CGWindowID(window.windowNumber), below: target)
+            if !ok { print("[vignette] order: SLSOrderWindow refused") }
+        }
+        WindowOrdering.dumpOrder(ours: Set(windows.map { CGWindowID($0.windowNumber) }))
     }
 
     private func scheduleTeardown(after delay: TimeInterval) {

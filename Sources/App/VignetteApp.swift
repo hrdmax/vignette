@@ -49,11 +49,13 @@ final class AppModel {
         setvbuf(stdout, nil, _IONBF, 0)  // unbuffered, so logs show when piped
         isTrusted = Permissions.isAccessibilityTrusted
         print("[vignette] launched — accessibility trusted: \(isTrusted)")
+        print("[vignette] SkyLight ordering available: \(WindowOrdering.isAvailable)")
 
         tracker.onChange = { [weak self] window in
             guard let self else { return }
             self.focused = window
             self.overlay.update(focused: window)
+            self.reorder()
 
             // Only on app switches: move/resize now fires per frame during a drag.
             if window?.pid != self.lastLoggedPID {
@@ -85,6 +87,7 @@ final class AppModel {
         Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
             MainActor.assumeIsolated { [weak self] in
                 guard let self else { return }
+                self.placeNow()
                 let trusted = Permissions.isAccessibilityTrusted
                 if trusted != self.isTrusted {
                     print("[vignette] accessibility trust changed: \(trusted)")
@@ -96,8 +99,33 @@ final class AppModel {
 
     private func applyEnabled() {
         overlay.setEnabled(isDimmingEnabled)
-        // Only pay for mouse polling while the overlay is actually up.
-        tracker.setDragWatchingEnabled(isDimmingEnabled)
+        // EXPERIMENT: drag watching is off. Suspending during a drag existed only
+        // because the cut-out lagged a moving window; nothing lags now.
+        tracker.setDragWatchingEnabled(false)
+        if isDimmingEnabled { reorder() }
+    }
+
+    /// Re-asserts the blur's position beneath the focused window.
+    ///
+    /// Repeated after short delays because window activation settles
+    /// asynchronously: ordering immediately can land before the WindowServer has
+    /// finished raising the newly focused window, leaving the blur below both it
+    /// and the window that was focused before.
+    private func reorder() {
+        guard isDimmingEnabled else { return }
+        placeNow()
+
+        for delay in [0.05, 0.2] {
+            let timer = Timer(timeInterval: delay, repeats: false) { _ in
+                MainActor.assumeIsolated { [weak self] in self?.placeNow() }
+            }
+            RunLoop.main.add(timer, forMode: .common)
+        }
+    }
+
+    private func placeNow() {
+        guard isDimmingEnabled, let focused else { return }
+        overlay.place(below: focused)
     }
 
     func recordShortcut() {

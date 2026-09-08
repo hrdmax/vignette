@@ -23,11 +23,14 @@ final class OverlayWindow: NSWindow {
         // Starts invisible: every appearance is a fade in, never a hard cut.
         alphaValue = 0
 
-        level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.mainMenuWindow)) - 1)
+        // EXPERIMENT: normal level, so the window participates in the ordering
+        // SkyLight will place it into. It also puts the Dock (level 20) and menu
+        // bar (24) naturally above the blur, which the cut-out had to handle
+        // separately.
+        level = .normal
 
         collectionBehavior = [
             .canJoinAllSpaces,
-            .stationary,
             .fullScreenAuxiliary,
             .ignoresCycle,
         ]

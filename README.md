@@ -18,7 +18,7 @@ truth — edit that, then `make gen`. Never hand-edit the `.xcodeproj`.
 project.yml            XcodeGen manifest (targets, build settings, signing)
 Sources/App/           Entry point, menu bar UI
 Sources/Focus/         Focused-window tracking via the Accessibility API
-Sources/Overlay/       Overlay windows + blur (not built yet)
+Sources/Overlay/       Per-screen overlay windows, blur, hole-punch mask
 Sources/Permissions/   TCC permission checks and prompts
 Resources/             Info.plist, entitlements
 Tests/                 swift-testing suite
@@ -36,6 +36,27 @@ Tests/                 swift-testing suite
 | `make kill` | Stop a running instance |
 | `make clean` | Drop `build/` and the generated project |
 | `make tcc-reset` | Forget the Accessibility grant, to re-test onboarding |
+
+## How it works
+
+One borderless, click-through `OverlayWindow` per screen, each holding a
+`ScrimView`: an `NSVisualEffectView` in `.behindWindow` blending mode (which blurs
+whatever is rendered beneath it) plus a black tint, masked by an even-odd
+`CAShapeLayer` that punches out the focused window.
+
+Two constraints that are load-bearing rather than stylistic:
+
+- **The overlay sits below the menu bar level.** The menu bar is the app's only UI,
+  so it has to stay reachable even when the geometry is wrong.
+- **`blurView.state = .active`.** The overlay window is never key, and the default
+  state switches the blur off whenever that's true — i.e. always.
+
+Focus tracking is `AXObserver`-driven. Drag state is *not*: it comes from polling
+`NSEvent.pressedMouseButtons` at 60Hz, because installing an `NSEvent` global
+monitor stops `MenuBarExtra`'s status item from opening its menu at all. Moves and
+resizes are handled differently on purpose — AX reports live geometry throughout a
+resize, but its position attribute is stale for the whole of a drag, so the scrim
+stands down for moves and tracks live for resizes.
 
 ## Code signing
 

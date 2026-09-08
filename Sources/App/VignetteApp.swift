@@ -43,7 +43,6 @@ final class AppModel {
     private let tracker = FocusTracker()
     private let overlay = OverlayController()
     private var lastLoggedPID: pid_t?
-    private var lastRaisedPID: pid_t?
     private var recorderPanel: ShortcutRecorderPanel?
 
     init() {
@@ -55,7 +54,7 @@ final class AppModel {
             guard let self else { return }
             self.focused = window
             self.overlay.update(focused: window)
-            self.restack(for: window)
+            self.restack()
 
             // Only on app switches: move/resize now fires per frame during a drag.
             if window?.pid != self.lastLoggedPID {
@@ -87,6 +86,7 @@ final class AppModel {
         Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
             MainActor.assumeIsolated { [weak self] in
                 guard let self else { return }
+                self.restackNow()
                 let trusted = Permissions.isAccessibilityTrusted
                 if trusted != self.isTrusted {
                     print("[vignette] accessibility trust changed: \(trusted)")
@@ -102,18 +102,33 @@ final class AppModel {
         // because the cut-out lagged behind a moving window; with the window above
         // the blur there is no geometry to lag.
         tracker.setDragWatchingEnabled(false)
-        if isDimmingEnabled { restack(for: focused) }
+        if isDimmingEnabled { restack() }
     }
 
     /// Raises the blur above other apps, then lifts the focused window back over
     /// it. Keyed on the owning process: activating an app raises all its windows
     /// above ours, so that is exactly when the order needs re-establishing. Also
     /// stops the AX raise from re-triggering itself into a loop.
-    private func restack(for window: FocusedWindow?) {
-        guard isDimmingEnabled, let window else { return }
-        guard window.pid != lastRaisedPID else { return }
-        lastRaisedPID = window.pid
+    /// Re-asserts the order: blur above other apps, focused window above the blur.
+    ///
+    /// Repeated after short delays because activation settles asynchronously —
+    /// ordering immediately can land before the WindowServer has finished raising
+    /// the newly focused window. Previously this fired once per app switch, which
+    /// is why it looked unreliable.
+    private func restack() {
+        guard isDimmingEnabled else { return }
+        restackNow()
 
+        for delay in [0.05, 0.2] {
+            let timer = Timer(timeInterval: delay, repeats: false) { _ in
+                MainActor.assumeIsolated { [weak self] in self?.restackNow() }
+            }
+            RunLoop.main.add(timer, forMode: .common)
+        }
+    }
+
+    private func restackNow() {
+        guard isDimmingEnabled, focused != nil else { return }
         overlay.bringToFront()
         tracker.raiseFocusedWindow()
     }

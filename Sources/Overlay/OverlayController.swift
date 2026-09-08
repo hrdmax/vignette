@@ -126,7 +126,9 @@ final class OverlayController {
 
     /// Puts the blur above other applications' windows without activating us.
     func bringToFront() {
-        for window in windows where window.isVisible {
+        // No isVisible guard: at enable time the overlay is still fading in and
+        // reports invisible, which silently skipped the initial ordering.
+        for window in windows {
             window.orderFrontRegardless()
         }
     }

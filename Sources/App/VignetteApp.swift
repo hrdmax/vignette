@@ -24,7 +24,11 @@ final class AppModel {
     /// Off at launch on purpose: a full-screen scrim should never appear until
     /// the user asks for it.
     var isDimmingEnabled = false {
-        didSet { overlay.setEnabled(isDimmingEnabled) }
+        didSet {
+            overlay.setEnabled(isDimmingEnabled)
+            // Only pay for mouse polling while the overlay is actually up.
+            tracker.setDragWatchingEnabled(isDimmingEnabled)
+        }
     }
 
     var dimming: CGFloat {
@@ -51,6 +55,9 @@ final class AppModel {
                 self.lastLoggedPID = window?.pid
                 print("[vignette] focus: \(window?.appName ?? "none")")
             }
+        }
+        tracker.onMotionChange = { [weak self] isMoving in
+            self?.overlay.setSuspended(isMoving)
         }
         tracker.start()
 

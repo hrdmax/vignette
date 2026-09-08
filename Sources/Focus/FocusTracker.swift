@@ -47,8 +47,7 @@ private func focusObserverCallback(
 ) {
     guard let refcon else { return }
     let tracker = Unmanaged<FocusTracker>.fromOpaque(refcon).takeUnretainedValue()
-    let name = notification as String
-    MainActor.assumeIsolated { tracker.handle(notification: name) }
+    MainActor.assumeIsolated { tracker.refresh() }
 }
 
 @MainActor
@@ -66,8 +65,18 @@ final class FocusTracker {
     private var observedPID: pid_t?
     private var observedWindow: AXUIElement?
 
-    private var motionTimer: Timer?
-    private var lastMotionAt: Date?
+    /// Fires `true` on the first pixel of a drag, `false` shortly after mouse-up.
+    var onMotionChange: ((Bool) -> Void)?
+
+    /// Grace period after mouse-up before the scrim returns, so it lands on the
+    /// window's final position rather than its second-to-last one.
+    var dragReleaseSettleDelay: TimeInterval = 0.05
+
+    private var mouseTimer: Timer?
+    private var releaseTimer: Timer?
+    private var isMoving = false
+    private var wasButtonDown = false
+    private var pressOrigin: NSPoint?
 
     private struct Snapshot {
         let window: FocusedWindow
@@ -86,7 +95,9 @@ final class FocusTracker {
         // Not every app is a good AX citizen — some never emit move/resize. A slow
         // poll keeps those from getting stuck, without the cost of the old 250ms one.
         safetyNetTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
-            MainActor.assumeIsolated { [weak self] in self?.refresh() }
+            MainActor.assumeIsolated { [weak self] in
+                self?.refresh()
+            }
         }
 
         refresh()
@@ -99,18 +110,10 @@ final class FocusTracker {
         activationObserver = nil
         safetyNetTimer?.invalidate()
         safetyNetTimer = nil
-        endMotionTracking()
+        stopWatchingMouse()
+        releaseTimer?.invalidate()
+        releaseTimer = nil
         detachObserver()
-    }
-
-    func handle(notification: String) {
-        // macOS coalesces move notifications during a drag (the WindowServer owns
-        // the drag; the app reports position only sporadically). Resize streams
-        // fine. So on the first move we poll hard until the window settles.
-        if notification == kAXWindowMovedNotification {
-            beginMotionTracking()
-        }
-        refresh()
     }
 
     func refresh() {
@@ -119,30 +122,103 @@ final class FocusTracker {
         retarget(snapshot)
     }
 
-    // MARK: - Motion tracking
+    // MARK: - Drag tracking
 
-    private func beginMotionTracking() {
-        lastMotionAt = Date()
-        guard motionTimer == nil else { return }
+    // macOS hands live window drags to the WindowServer, and the AX position
+    // attribute stays stale for the duration — polling it harder doesn't help
+    // (measured). So we don't ask AX whether a drag is happening; we watch the
+    // mouse directly. That fires on the first pixel of movement rather than
+    // whenever the app gets round to reporting itself, and gives us a real
+    // mouse-up instead of inferring the end from a timeout.
+    //
+    // Resize is unaffected: those notifications stream with live geometry, and
+    // nothing here touches that path.
 
-        let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { _ in
-            MainActor.assumeIsolated { [weak self] in
-                guard let self else { return }
-                self.refresh()
-                if Date().timeIntervalSince(self.lastMotionAt ?? .distantPast) > 0.2 {
-                    self.endMotionTracking()
-                }
+    /// Watching the mouse is opt-in because it costs a 60Hz timer: the caller
+    /// turns it on only while the overlay is actually up.
+    func setDragWatchingEnabled(_ enabled: Bool) {
+        if enabled {
+            startWatchingMouse()
+        } else {
+            stopWatchingMouse()
+            if isMoving {
+                isMoving = false
+                onMotionChange?(false)
             }
+        }
+    }
+
+    // We poll the mouse rather than installing an NSEvent global monitor. A
+    // monitor stops MenuBarExtra's status item from opening its menu at all
+    // (verified by bisecting against main), and there is no way to have both.
+    // Reading the button state directly needs no monitor and no permission.
+
+    private func startWatchingMouse() {
+        guard mouseTimer == nil else { return }
+        let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { _ in
+            MainActor.assumeIsolated { [weak self] in self?.pollMouse() }
         }
         // .common so it keeps firing while the run loop is in event-tracking mode.
         RunLoop.main.add(timer, forMode: .common)
-        motionTimer = timer
+        mouseTimer = timer
     }
 
-    private func endMotionTracking() {
-        motionTimer?.invalidate()
-        motionTimer = nil
-        lastMotionAt = nil
+    private func stopWatchingMouse() {
+        mouseTimer?.invalidate()
+        mouseTimer = nil
+        wasButtonDown = false
+        pressOrigin = nil
+    }
+
+    private func pollMouse() {
+        let isDown = NSEvent.pressedMouseButtons & 1 != 0
+        let location = NSEvent.mouseLocation
+        defer { wasButtonDown = isDown }
+
+        if isDown, !wasButtonDown {
+            pressOrigin = location
+            return
+        }
+
+        if isDown, !isMoving, let origin = pressOrigin {
+            // A few points of slop, so a plain click never counts as a drag.
+            if hypot(location.x - origin.x, location.y - origin.y) > 2 {
+                beginDrag()
+            }
+            return
+        }
+
+        if !isDown, wasButtonDown {
+            pressOrigin = nil
+            endDrag()
+        }
+    }
+
+    private func beginDrag() {
+        guard !isMoving else { return }
+        isMoving = true
+        onMotionChange?(true)
+    }
+
+    private func endDrag() {
+        guard isMoving else { return }
+        releaseTimer?.invalidate()
+
+        // Give the app one beat to publish its final position, so the scrim never
+        // fades back in around a stale rect. Imperceptible on release.
+        refresh()
+        let timer = Timer(timeInterval: dragReleaseSettleDelay, repeats: false) { _ in
+            MainActor.assumeIsolated { [weak self] in
+                guard let self else { return }
+                self.releaseTimer = nil
+                guard self.isMoving else { return }
+                self.isMoving = false
+                self.refresh()
+                self.onMotionChange?(false)
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        releaseTimer = timer
     }
 
     // MARK: - Observer wiring

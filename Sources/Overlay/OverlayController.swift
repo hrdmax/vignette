@@ -21,6 +21,7 @@ final class OverlayController {
     private var windows: [OverlayWindow] = []
     private var lastFocused: FocusedWindow?
     private var screenObserver: NSObjectProtocol?
+    private var isSuspended = false
 
     init() {
         screenObserver = NotificationCenter.default.addObserver(
@@ -57,6 +58,13 @@ final class OverlayController {
         apply(focused)
     }
 
+    /// Stands the scrim down while the focused window is being dragged. The AX
+    /// position is stale mid-drag, so a visible scrim would simply lag behind.
+    func setSuspended(_ suspended: Bool) {
+        isSuspended = suspended
+        for window in windows { window.scrim?.isSuspended = suspended }
+    }
+
     // MARK: - Internals
 
     private func apply(_ focused: FocusedWindow?) {
@@ -87,6 +95,7 @@ final class OverlayController {
         windows = NSScreen.screens.map { screen in
             let window = OverlayWindow(screen: screen)
             window.scrim?.dimming = dimming
+            window.scrim?.isSuspended = isSuspended
             return window
         }
     }

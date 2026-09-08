@@ -34,7 +34,11 @@ final class OverlayWindow: NSWindow {
 
         collectionBehavior = [
             .canJoinAllSpaces,
-            .stationary,
+            // .transient, not .stationary: they are opposites, and .stationary
+            // means "unaffected by Exposé, stay put" — which left the scrim
+            // covering Mission Control. .transient pulls the window off screen
+            // for the duration instead, with no detection code.
+            .transient,
             .fullScreenAuxiliary,
             .ignoresCycle,
         ]

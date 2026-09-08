@@ -81,6 +81,10 @@ Two constraints that are load-bearing rather than stylistic:
   otherwise invisible unless the focused window covered that part of the screen,
   and for the menu bar because it holds the app's only UI, so it must stay
   reachable even if the cut-out is wrong.
+- **`collectionBehavior` uses `.transient`, not `.stationary`.** They are
+  opposites: `.stationary` means "unaffected by Exposé, stay put", which left the
+  blur covering Mission Control. `.transient` pulls the window off screen for the
+  duration, so Mission Control needs no detection code at all.
 - **`blurView.state = .active`.** The overlay window is never key, and the default
   state switches the blur off whenever that's true — i.e. always.
 
@@ -103,17 +107,6 @@ stands down for moves and tracks live for resizes.
 ## To do
 
 Roughly in priority order.
-
-**Disable the blur while Mission Control is open.** The scrim currently stays up
-over Mission Control, which is wrong — there is no focused window to emphasise
-there.
-
-First thing to try is `NSWindow.CollectionBehavior.transient`, which is documented
-to pull a window off screen when Exposé or Mission Control is invoked; if that
-works it needs no detection code at all. If it doesn't, Mission Control runs
-inside the Dock process, so watching for that becoming frontmost is the fallback.
-Note the blur does *not* switch off by itself today: the focused window is still
-readable via AX while Mission Control is up, so `shouldBeVisible` stays true.
 
 **Widen title-bar detection if an app needs it.** Suspension waits for AX to
 confirm a window moved, with a press on the 28pt title-bar band as a fast path.

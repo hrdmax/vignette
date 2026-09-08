@@ -104,6 +104,47 @@ resizes are handled differently on purpose — AX reports live geometry througho
 resize, but its position attribute is stale for the whole of a drag, so the scrim
 stands down for moves and tracks live for resizes.
 
+## Why not just layer the blur under the focused window?
+
+The obvious design is to skip the cut-out entirely: put a full-screen blur into
+the window stack directly beneath the focused window, and let that window mask
+itself. No geometry tracking, no coordinate flipping, no corner radius, no drag
+handling, no multi-display maths — most of this app's complexity exists only to
+reconstruct a shape the compositor already knows.
+
+**macOS does not allow it.** Both routes were built and measured; the branches are
+`experiment/z-order-blur` and `experiment/z-order-private`.
+
+**Public APIs.** `NSWindow.orderWindow(_:relativeTo:)` is the exact operation, but
+it is same-application only, and window levels are coarse buckets you cannot
+insert yourself into. The closest approximation is `orderFrontRegardless()` to
+raise the blur above other apps, then `AXRaise` to lift the focused window back
+over it. That does move windows, but it competes with the WindowServer's own
+ordering, so it flickers. Re-asserting the order more often made it worse, not
+better: occasional flicker became constant flicker.
+
+**Private APIs.** SkyLight's `SLSOrderWindow` orders a window relative to any
+window id, which is what tiling window managers use. It resolves on macOS 26, the
+window-id lookup works, and the call returns success every time — but reading the
+z-order back with `CGWindowListCopyWindowInfo` shows the overlay is never moved
+when the reference window belongs to another process. Accepted and ignored:
+
+```
+Ghostty > OVERLAY > TextEdit > Zen > Finder   <- AppKit's orderFront put it here
+Ghostty > Zen > TextEdit > OVERLAY > Finder   <- after switching apps, and it stays
+                                                 here across repeated successful
+                                                 re-order calls
+```
+
+Cross-application window insertion is not available, almost certainly by design —
+it would let any app conceal itself inside another app's window stack. So the
+cut-out is not a workaround for want of a better idea; it is the available
+approach, and the corner imperfection is what it costs.
+
+One incidental finding worth keeping: `CGWindowID` must be bridged via `NSNumber`.
+`as? UInt32` fails silently against an `NSNumber`, which killed every window-id
+lookup and made a working call look like a broken one.
+
 ## To do
 
 Roughly in priority order.

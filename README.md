@@ -91,22 +91,15 @@ stands down for moves and tracks live for resizes.
 
 Roughly in priority order.
 
-**Punch holes for the focused app's other windows.** Dropdowns, sheets, popovers
-and autocomplete panels are separate windows outside the main window's frame, so
-they currently get blurred while you're using them. This is the one remaining
-issue that reads as a bug rather than a missing feature. Fix: instead of one hole
-from `kAXFocusedWindowAttribute`, punch one per window belonging to the focused
-app — and include windows with a layer above 0, since menus live there.
-
 **Persist preferences.** The toggle and darken level reset on every launch.
 `UserDefaults`, read in `AppModel.init`.
 
-**Narrow drag detection.** Any left-drag suspends the blur, text selection and
-file drags included, because `pollMouse` can't tell them apart at the instant
-movement starts. Deliberately over-triggers: failing to undim during a real window
-drag is a worse outcome than undimming when you didn't need it. If it does become
-annoying, the lead is checking at mouse-down whether the press landed on the title
-bar — but that risks the worse failure for apps with unusual drag regions.
+**Widen title-bar detection if an app needs it.** Suspension waits for AX to
+confirm a window moved, with a press on the 28pt title-bar band as a fast path.
+Apps that can be dragged from elsewhere — a hidden title bar, a tall custom
+toolbar — fall to the AX path and undim slightly late. Widening `titleBarHeight`
+would fix a specific app at the cost of false positives elsewhere, so it is worth
+doing only if one actually annoys you.
 
 **Test multi-display.** `FocusedWindow.flipped` anchors to the primary screen's
 height, which is exactly where this kind of coordinate maths breaks. One overlay

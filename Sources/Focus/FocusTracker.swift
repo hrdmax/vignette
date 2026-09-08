@@ -77,6 +77,9 @@ final class FocusTracker {
     /// macOS itself uses a band of roughly this width.
     private let resizeEdgeSlop: CGFloat = 8
 
+    /// Standard macOS title bar. Kept conservative on purpose — see `beginDrag`.
+    private let titleBarHeight: CGFloat = 28
+
     private var mouseTimer: Timer?
     private var releaseTimer: Timer?
     private var isMoving = false
@@ -224,16 +227,24 @@ final class FocusTracker {
         sawResizeThisDrag = false
 
         // A press on the window's edge is a resize grab. AX streams live geometry
-        // for resizes, so the dim can stay up and track it. Anything else is a
-        // move, where the reported position goes stale and the scrim must stand
-        // down. This is only the opening guess — `handle(notification:)` corrects
-        // it as soon as AX says which it really was.
+        // for resizes, so the scrim can stay up and track it.
         if pressIsOnWindowEdge() {
             sawResizeThisDrag = true
             return
         }
 
-        suspend()
+        // Otherwise: a drag is not proof the window is moving. Selecting text,
+        // dragging a scrollbar or a file all look identical to the mouse. Only AX
+        // can say a window actually moved, so we wait for it — with one exception.
+        //
+        // The exception is a press on the title bar, which is a window drag
+        // essentially every time. Suspending there immediately keeps the common
+        // case instant, since the first move notification arrives too late to
+        // rely on. The band is deliberately narrow: guessing wrong here costs a
+        // visible delay, while guessing nothing at all just defers to AX.
+        if pressIsOnTitleBar() {
+            suspend()
+        }
     }
 
     private func suspend() {
@@ -247,6 +258,22 @@ final class FocusTracker {
         guard isMoving else { return }
         isMoving = false
         onMotionChange?(false)
+    }
+
+    /// Top strip of the focused window, excluding the resize edges.
+    private func pressIsOnTitleBar() -> Bool {
+        guard let pressOrigin, let current else { return false }
+        let frame = FocusedWindow.flipped(current.frame)
+        guard frame.height > titleBarHeight else { return false }
+
+        // AppKit's y grows upward, so the title bar is the top of the rect.
+        let band = CGRect(
+            x: frame.minX + resizeEdgeSlop,
+            y: frame.maxY - titleBarHeight,
+            width: max(0, frame.width - resizeEdgeSlop * 2),
+            height: titleBarHeight - resizeEdgeSlop
+        )
+        return band.contains(pressOrigin)
     }
 
     private func pressIsOnWindowEdge() -> Bool {

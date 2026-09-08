@@ -27,10 +27,14 @@ targets:
         INFOPLIST_FILE: Resources/Info.plist
         CODE_SIGN_ENTITLEMENTS: Resources/Vignette.entitlements
         CODE_SIGN_STYLE: Manual
-        # Ad-hoc for now. See README: swap to a stable identity so the
-        # Accessibility grant survives rebuilds.
-        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGN_IDENTITY: "Apple Development"
+        DEVELOPMENT_TEAM: AH9NNPN928
+        PROVISIONING_PROFILE_SPECIFIER: ""
         ENABLE_HARDENED_RUNTIME: YES
+        # Xcode ships Debug builds as a stub exe + Vignette.debug.dylib (for
+        # Preview hot-reload). That split breaks TCC: the Accessibility grant
+        # never sticks. We need one plain executable.
+        ENABLE_DEBUG_DYLIB: NO
         SWIFT_STRICT_CONCURRENCY: complete
         COMBINE_HIDPI_IMAGES: YES
     scheme:

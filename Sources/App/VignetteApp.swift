@@ -24,16 +24,25 @@ final class AppModel {
     private let tracker = FocusTracker()
 
     init() {
+        setvbuf(stdout, nil, _IONBF, 0)  // unbuffered, so logs show when piped
         isTrusted = Permissions.isAccessibilityTrusted
+        print("[vignette] launched — accessibility trusted: \(isTrusted)")
+
         tracker.onChange = { [weak self] window in
             self?.focused = window
+            if let window { print("[vignette] focus: \(window.appName) \(window.frame)") }
         }
         tracker.start()
 
         // The grant happens in System Settings, outside our process, so poll for it.
         Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
             MainActor.assumeIsolated { [weak self] in
-                self?.isTrusted = Permissions.isAccessibilityTrusted
+                guard let self else { return }
+                let trusted = Permissions.isAccessibilityTrusted
+                if trusted != self.isTrusted {
+                    print("[vignette] accessibility trust changed: \(trusted)")
+                }
+                self.isTrusted = trusted
             }
         }
     }

@@ -37,24 +37,40 @@ Tests/                 swift-testing suite
 | `make clean` | Drop `build/` and the generated project |
 | `make tcc-reset` | Forget the Accessibility grant, to re-test onboarding |
 
-## Code signing — read this before you lose an afternoon
+## Code signing
 
-macOS ties the Accessibility grant to the app's **code signature**. The project
-currently signs ad-hoc (`CODE_SIGN_IDENTITY: "-"`), which produces a different hash on
-every build — so every rebuild silently revokes Accessibility, and the app goes dead
-with no error. You'd be re-toggling the System Settings checkbox all day.
+Signed with a free **Apple Development** certificate (team `AH9NNPN928`), configured in
+`project.yml`. Nothing to do — but if you ever set this up on another machine:
 
-The fix is free and takes two minutes:
+1. Xcode → Settings → Accounts → sign in with your Apple ID (free; no paid account).
+2. Select the Personal Team → **Manage Certificates…** → **+** → *Apple Development*.
+3. Verify with `security find-identity -v -p codesigning`.
 
-1. Xcode → Settings → Accounts → **+** → sign in with your Apple ID. This creates a
-   free "Personal Team" and an `Apple Development` certificate.
-2. `security find-identity -v -p codesigning` — copy the identity name and team ID.
-3. In `project.yml`, set `CODE_SIGN_IDENTITY: "Apple Development"`,
-   `CODE_SIGN_STYLE: Automatic`, and `DEVELOPMENT_TEAM: <YOUR_TEAM_ID>`.
-4. `make clean && make run`, grant Accessibility once — it now survives rebuilds.
+**If the identity shows `CSSMERR_TP_NOT_TRUSTED`** it means Apple's WWDR intermediate is
+missing, so the cert can't chain to Apple Root CA. macOS may only ship the G1
+intermediate, which expired in Feb 2023. Install the current one:
+
+```sh
+curl -O https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer
+security import AppleWWDRCAG3.cer -k ~/Library/Keychains/login.keychain-db
+```
+
+The Team ID is the certificate's **OU** field — *not* the ID in parentheses in the
+common name, which is a per-certificate identifier. Confirm what actually got used with
+`codesign -dvvv <app> 2>&1 | grep TeamIdentifier`.
 
 A paid account ($99/yr) is only needed later, for the **Developer ID** certificate and
 notarization that let other people run the app.
+
+## Accessibility permission
+
+`ENABLE_DEBUG_DYLIB: NO` in `project.yml` is **load-bearing**. By default Xcode builds
+Debug configs as a stub executable plus a separate `.debug.dylib` (for Preview
+hot-reload). TCC can't resolve the app's identity across that split, so the
+Accessibility grant silently never applies — the app reports "not trusted" no matter how
+many times you tick the box in System Settings. Don't remove that setting.
+
+`make tcc-reset` forgets the grant if you want to re-test onboarding.
 
 ## Distribution constraint
 

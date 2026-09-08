@@ -28,8 +28,13 @@ openssl req -x509 -newkey rsa:2048 -nodes -days 3650 \
   -addext "extendedKeyUsage=critical,codeSigning" 2>/dev/null
 
 echo "==> Bundling into a .p12"
+# The legacy algorithms are not optional. OpenSSL 3 defaults to AES-256 with a
+# SHA-256 MAC, which macOS's `security import` cannot read — and it reports the
+# failure as "MAC verification failed (wrong password?)", which sends you hunting
+# for a credential problem that isn't there.
 openssl pkcs12 -export -inkey key.pem -in cert.pem -out signing.p12 \
-  -name "$NAME" -passout pass:"$P12_PASS"
+  -name "$NAME" -passout pass:"$P12_PASS" \
+  -keypbe PBE-SHA1-3DES -certpbe PBE-SHA1-3DES -macalg sha1
 
 echo "==> Importing into your login keychain (for local release builds)"
 security import signing.p12 -k ~/Library/Keychains/login.keychain-db \

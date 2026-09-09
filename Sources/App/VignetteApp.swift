@@ -42,7 +42,9 @@ final class AppModel {
 
     private let tracker = FocusTracker()
     private let overlay = OverlayController()
+    #if DEBUG
     private var lastLoggedPID: pid_t?
+    #endif
     private var recorderPanel: ShortcutRecorderPanel?
 
     init() {
@@ -55,11 +57,14 @@ final class AppModel {
             self.focused = window
             self.overlay.update(focused: window)
 
+            #if DEBUG
+            // Application usage must never be logged in distributed builds.
             // Only on app switches: move/resize now fires per frame during a drag.
             if window?.pid != self.lastLoggedPID {
                 self.lastLoggedPID = window?.pid
                 print("[vignette] focus: \(window?.appName ?? "none")")
             }
+            #endif
         }
         tracker.onMotionChange = { [weak self] isMoving in
             self?.overlay.setSuspended(isMoving)

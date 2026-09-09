@@ -22,16 +22,29 @@ not verify this app is free of malware". Approve it once:
 **System Settings → Privacy & Security →** scroll to Security **→ Open Anyway**,
 authenticate, then confirm.
 
-This repeats after every update, because each new build is an unnotarized binary
-Gatekeeper has never seen. To skip it for good, install without the quarantine
-flag instead:
+An update may require approval again. Keep Homebrew quarantine enabled and approve
+only the particular release you trust. If you previously added
+`HOMEBREW_CASK_OPTS="--no-quarantine"` to your shell profile, remove that option
+and restart your shell.
 
-```sh
-brew install --cask --no-quarantine hrdmax/tap/vignette
-```
+## Security and privacy
 
-and put `export HOMEBREW_CASK_OPTS="--no-quarantine"` in your shell profile so
-`brew upgrade` keeps behaving the same way.
+Vignette runs outside the App Sandbox and needs Accessibility access to read the
+focused window's position and size. That permission can also allow an app to
+control other apps, so grant it only to a build and publisher you trust. Revoke it
+in System Settings → Privacy & Security → Accessibility when no longer needed.
+The current app has no network communication, third-party runtime dependencies,
+or automatic updater. Release builds do not log which applications you use;
+Debug builds print application switches to stdout for troubleshooting.
+
+The blur is a focus aid, not a way to redact sensitive information. It disappears
+during some interactions, and the overlay requests exclusion from screen capture.
+Do not rely on it to hide information in screenshots or screen sharing.
+
+Releases currently use a self-signed certificate and are not notarized. The
+signature does not provide an Apple-verified developer identity or establish that
+a download matches this source. Developer ID signing and notarization remain
+release infrastructure work requiring the maintainer's Apple Developer account.
 
 ## Requirements
 
@@ -166,7 +179,7 @@ the overlay fades out and back in. That alone would flicker. The fix there is a
 short grace period before hiding on a nil focus, so a momentary gap doesn't start
 a fade cycle.
 
-Check which before changing either: the app logs `focus: none` when it reads nil,
+Check which before changing either: a Debug build logs `focus: none` when it reads nil,
 so a flicker with no such line in the log points at the first cause.
 
 **Widen title-bar detection if an app needs it.** Suspension waits for AX to
@@ -190,6 +203,10 @@ screen, and that hot-plugging a display doesn't leave a stale overlay behind.
 git tag v0.2.0 && git push origin v0.2.0
 ```
 
+Release versions must be three numeric components, such as `0.2.0`. Both manual
+releases and tags are validated before signing or publishing. Security script
+checks run in CI; run them locally with `ruby scripts/tests/security_test.rb`.
+
 `release.yml` then builds Release, signs, zips with `ditto`, publishes a GitHub
 Release, and commits an updated cask to the `homebrew-tap` repo. It fails the
 build if a release binary ever carries `get-task-allow`.
@@ -199,6 +216,11 @@ One-time setup:
 1. Create a **public** `homebrew-tap` repo under the same account.
 2. Run `scripts/make-signing-cert.sh`, then add the secrets it prints:
    `SIGNING_CERT_P12`, `SIGNING_CERT_PASSWORD`, `KEYCHAIN_PASSWORD`.
+   Keep the script open while copying the encrypted certificate file; pressing
+   Return at the final prompt deletes the temporary files. The helper uses a
+   private temporary directory and encrypts the private key on disk. It imports
+   the identity into your login keychain and asks for admin access to trust the
+   certificate for code signing; this is maintainer setup, not an install step.
 3. Add a deploy key with write access to the tap repo, and store its private
    half as the `TAP_DEPLOY_KEY` secret. A deploy key is scoped to that single
    repo, unlike a personal access token.

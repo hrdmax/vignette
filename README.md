@@ -22,16 +22,23 @@ not verify this app is free of malware". Approve it once:
 **System Settings → Privacy & Security →** scroll to Security **→ Open Anyway**,
 authenticate, then confirm.
 
-This repeats after every update, because each new build is an unnotarized binary
-Gatekeeper has never seen. To skip it for good, install without the quarantine
-flag instead:
+`brew upgrade` carries that approval over to the new version, as long as it is
+signed by the same certificate — which every release is. That needs Homebrew
+6.0.9 or later; older versions, or a zip downloaded by hand, prompt again after
+each update.
 
-```sh
-brew install --cask --no-quarantine hrdmax/tap/vignette
-```
+## Security and privacy
 
-and put `export HOMEBREW_CASK_OPTS="--no-quarantine"` in your shell profile so
-`brew upgrade` keeps behaving the same way.
+Vignette needs Accessibility access to read the focused window's position and
+size. That permission is broad — it also lets an app control other apps — and
+Vignette runs outside the App Sandbox, so revoke it under System Settings →
+Privacy & Security → Accessibility if you stop using the app. It makes no network
+connections, has no third-party dependencies and no updater, and Release builds
+log nothing about which apps you use.
+
+The blur is a focus aid, not a privacy screen. It drops out during drags and
+Mission Control, and the overlay asks to be left out of screen capture, so it
+hides nothing in screenshots or screen shares.
 
 ## Requirements
 
@@ -166,7 +173,7 @@ the overlay fades out and back in. That alone would flicker. The fix there is a
 short grace period before hiding on a nil focus, so a momentary gap doesn't start
 a fade cycle.
 
-Check which before changing either: the app logs `focus: none` when it reads nil,
+Check which before changing either: a Debug build logs `focus: none` when it reads nil,
 so a flicker with no such line in the log points at the first cause.
 
 **Widen title-bar detection if an app needs it.** Suspension waits for AX to
@@ -190,6 +197,10 @@ screen, and that hot-plugging a display doesn't leave a stale overlay behind.
 git tag v0.2.0 && git push origin v0.2.0
 ```
 
+Versions must be three numeric components, such as `0.2.0`; tags and manual runs
+are both checked before anything is signed or published.
+`scripts/tests/release_version_test.rb` tests that check, and CI runs it.
+
 `release.yml` then builds Release, signs, zips with `ditto`, publishes a GitHub
 Release, and commits an updated cask to the `homebrew-tap` repo. It fails the
 build if a release binary ever carries `get-task-allow`.
@@ -199,15 +210,21 @@ One-time setup:
 1. Create a **public** `homebrew-tap` repo under the same account.
 2. Run `scripts/make-signing-cert.sh`, then add the secrets it prints:
    `SIGNING_CERT_P12`, `SIGNING_CERT_PASSWORD`, `KEYCHAIN_PASSWORD`.
+   Leave it running while you copy the certificate into GitHub: pressing Return
+   at its final prompt deletes the temporary files. It also imports the identity
+   into your login keychain and asks for admin rights to trust it for code signing.
 3. Add a deploy key with write access to the tap repo, and store its private
    half as the `TAP_DEPLOY_KEY` secret. A deploy key is scoped to that single
    repo, unlike a personal access token.
 
-**Why self-signed rather than ad-hoc.** It does nothing for Gatekeeper — only
+**Why self-signed rather than ad-hoc.** It doesn't get past Gatekeeper — only
 notarization does. What it buys is a *stable* signature. Ad-hoc signing produces a
 different hash every build, and macOS ties the Accessibility grant to the
 signature, so every update would silently kill the app until the user
-re-approved it. One persistent certificate keeps the grant across updates.
+re-approved it. One persistent certificate keeps the grant across updates. It
+also keeps the Gatekeeper approval: Homebrew only carries that over on upgrade
+when the new build satisfies the old one's designated requirement, which here is
+"signed by this certificate".
 
 Release builds use `Resources/Vignette-Release.entitlements`, which omits
 `get-task-allow`, and set `CODE_SIGN_INJECT_BASE_ENTITLEMENTS: NO` — without that

@@ -10,17 +10,30 @@
 # encrypted .p12 you paste into GitHub secrets.
 
 set -euo pipefail
+umask 077
 
 NAME="Vignette Self-Signed"
-OUT="${TMPDIR:-/tmp}/vignette-signing"
-mkdir -p "$OUT"
+OUT="$(mktemp -d "${TMPDIR:-/tmp}/vignette-signing.XXXXXX")"
+cleanup() {
+  rm -f -- "$OUT/key.pem" "$OUT/cert.pem" "$OUT/signing.p12" "$OUT/signing.p12.base64"
+  rmdir -- "$OUT"
+}
+trap cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 cd "$OUT"
 
 read -rsp "Choose a password to encrypt the .p12 (you'll paste it into GitHub secrets): " P12_PASS
 echo
+if [ -z "$P12_PASS" ]; then
+  echo "A nonempty password is required." >&2
+  exit 1
+fi
+export P12_PASS
 
 echo "==> Generating key and certificate"
-openssl req -x509 -newkey rsa:2048 -nodes -days 3650 \
+openssl req -x509 -newkey rsa:2048 -passout env:P12_PASS -days 3650 \
   -keyout key.pem -out cert.pem \
   -subj "/CN=$NAME/O=Vignette/C=SE" \
   -addext "basicConstraints=critical,CA:FALSE" \
@@ -33,12 +46,13 @@ echo "==> Bundling into a .p12"
 # failure as "MAC verification failed (wrong password?)", which sends you hunting
 # for a credential problem that isn't there.
 openssl pkcs12 -export -inkey key.pem -in cert.pem -out signing.p12 \
-  -name "$NAME" -passout pass:"$P12_PASS" \
+  -name "$NAME" -passin env:P12_PASS -passout env:P12_PASS \
   -keypbe PBE-SHA1-3DES -certpbe PBE-SHA1-3DES -macalg sha1
 
 echo "==> Importing into your login keychain (for local release builds)"
 security import signing.p12 -k ~/Library/Keychains/login.keychain-db \
   -P "$P12_PASS" -T /usr/bin/codesign
+unset P12_PASS
 security set-key-partition-list -S apple-tool:,apple:,codesign: -s \
   -k "" ~/Library/Keychains/login.keychain-db >/dev/null 2>&1 || \
   echo "    (if codesign prompts for your password later, run set-key-partition-list manually)"
@@ -59,4 +73,5 @@ base64 -i signing.p12 -o signing.p12.base64
 echo "Base64 of the .p12 written to: $OUT/signing.p12.base64"
 echo
 echo "Copy it with:  pbcopy < $OUT/signing.p12.base64"
-echo "Then delete the directory:  rm -rf $OUT"
+echo "Temporary signing files are deleted when this script exits."
+read -rp "Press Return after saving the GitHub secrets to delete the temporary files. "

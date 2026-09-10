@@ -22,29 +22,23 @@ not verify this app is free of malware". Approve it once:
 **System Settings → Privacy & Security →** scroll to Security **→ Open Anyway**,
 authenticate, then confirm.
 
-An update may require approval again. Keep Homebrew quarantine enabled and approve
-only the particular release you trust. If you previously added
-`HOMEBREW_CASK_OPTS="--no-quarantine"` to your shell profile, remove that option
-and restart your shell.
+`brew upgrade` carries that approval over to the new version, as long as it is
+signed by the same certificate — which every release is. That needs Homebrew
+6.0.9 or later; older versions, or a zip downloaded by hand, prompt again after
+each update.
 
 ## Security and privacy
 
-Vignette runs outside the App Sandbox and needs Accessibility access to read the
-focused window's position and size. That permission can also allow an app to
-control other apps, so grant it only to a build and publisher you trust. Revoke it
-in System Settings → Privacy & Security → Accessibility when no longer needed.
-The current app has no network communication, third-party runtime dependencies,
-or automatic updater. Release builds do not log which applications you use;
-Debug builds print application switches to stdout for troubleshooting.
+Vignette needs Accessibility access to read the focused window's position and
+size. That permission is broad — it also lets an app control other apps — and
+Vignette runs outside the App Sandbox, so revoke it under System Settings →
+Privacy & Security → Accessibility if you stop using the app. It makes no network
+connections, has no third-party dependencies and no updater, and Release builds
+log nothing about which apps you use.
 
-The blur is a focus aid, not a way to redact sensitive information. It disappears
-during some interactions, and the overlay requests exclusion from screen capture.
-Do not rely on it to hide information in screenshots or screen sharing.
-
-Releases currently use a self-signed certificate and are not notarized. The
-signature does not provide an Apple-verified developer identity or establish that
-a download matches this source. Developer ID signing and notarization remain
-release infrastructure work requiring the maintainer's Apple Developer account.
+The blur is a focus aid, not a privacy screen. It drops out during drags and
+Mission Control, and the overlay asks to be left out of screen capture, so it
+hides nothing in screenshots or screen shares.
 
 ## Requirements
 
@@ -203,9 +197,9 @@ screen, and that hot-plugging a display doesn't leave a stale overlay behind.
 git tag v0.2.0 && git push origin v0.2.0
 ```
 
-Release versions must be three numeric components, such as `0.2.0`. Both manual
-releases and tags are validated before signing or publishing. Security script
-checks run in CI; run them locally with `ruby scripts/tests/security_test.rb`.
+Versions must be three numeric components, such as `0.2.0`; tags and manual runs
+are both checked before anything is signed or published.
+`scripts/tests/release_version_test.rb` tests that check, and CI runs it.
 
 `release.yml` then builds Release, signs, zips with `ditto`, publishes a GitHub
 Release, and commits an updated cask to the `homebrew-tap` repo. It fails the
@@ -216,20 +210,21 @@ One-time setup:
 1. Create a **public** `homebrew-tap` repo under the same account.
 2. Run `scripts/make-signing-cert.sh`, then add the secrets it prints:
    `SIGNING_CERT_P12`, `SIGNING_CERT_PASSWORD`, `KEYCHAIN_PASSWORD`.
-   Keep the script open while copying the encrypted certificate file; pressing
-   Return at the final prompt deletes the temporary files. The helper uses a
-   private temporary directory and encrypts the private key on disk. It imports
-   the identity into your login keychain and asks for admin access to trust the
-   certificate for code signing; this is maintainer setup, not an install step.
+   Leave it running while you copy the certificate into GitHub: pressing Return
+   at its final prompt deletes the temporary files. It also imports the identity
+   into your login keychain and asks for admin rights to trust it for code signing.
 3. Add a deploy key with write access to the tap repo, and store its private
    half as the `TAP_DEPLOY_KEY` secret. A deploy key is scoped to that single
    repo, unlike a personal access token.
 
-**Why self-signed rather than ad-hoc.** It does nothing for Gatekeeper — only
+**Why self-signed rather than ad-hoc.** It doesn't get past Gatekeeper — only
 notarization does. What it buys is a *stable* signature. Ad-hoc signing produces a
 different hash every build, and macOS ties the Accessibility grant to the
 signature, so every update would silently kill the app until the user
-re-approved it. One persistent certificate keeps the grant across updates.
+re-approved it. One persistent certificate keeps the grant across updates. It
+also keeps the Gatekeeper approval: Homebrew only carries that over on upgrade
+when the new build satisfies the old one's designated requirement, which here is
+"signed by this certificate".
 
 Release builds use `Resources/Vignette-Release.entitlements`, which omits
 `get-task-allow`, and set `CODE_SIGN_INJECT_BASE_ENTITLEMENTS: NO` — without that

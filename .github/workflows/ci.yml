@@ -15,10 +15,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check security scripts
+      - name: Check release scripts
         run: |
           bash -n scripts/make-signing-cert.sh
-          /usr/bin/ruby scripts/tests/security_test.rb
+          /usr/bin/ruby scripts/tests/release_version_test.rb
 
       - name: Install XcodeGen
         run: brew install xcodegen

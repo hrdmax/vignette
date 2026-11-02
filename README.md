@@ -156,6 +156,9 @@ lookup and made a working call look like a broken one.
 
 Roughly in priority order.
 
+**Fix child windows blurring out parent.** When opening a window in intellij
+for example by pressing command+p the main window is blurred out. Fix this
+
 **Fix flickering when switching Spaces.** The blur flickers as the desktop
 changes.
 
